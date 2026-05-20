@@ -1,138 +1,93 @@
-# Deploy e skill privada (só você)
+# Deploy no Render
 
-Duas camadas de proteção:
+## Segurança
 
-1. **Backend** — `ALLOWED_ALEXA_USER_IDS` bloqueia qualquer outra conta Amazon.
-2. **Console Alexa** — skill em modo desenvolvimento ou distribuição privada.
+- **Nunca** commite `.env` ou chaves no GitHub.
+- Configure credenciais apenas no **Render Dashboard** → seu Web Service → **Environment**.
+- O `render.yaml` não define valores de secrets.
+
+Variáveis necessárias (crie no painel do Render):
+
+| Nome | Obrigatório | Observação |
+|------|-------------|------------|
+| `OPENAI_API_KEY` | Sim | Painel OpenAI |
+| `ALLOWED_ALEXA_USER_IDS` | Sim (produção) | `userId` da Alexa (log local ou JSON Input) |
+| `ALEXA_VERIFY_SIGNATURE` | Sim | `true` em produção |
+| `NODE_ENV` | Recomendado | `production` |
+
+O Render define `PORT` automaticamente.
 
 ---
 
-## Deploy no Render (recomendado)
+## 1. Repositório
 
-### Pré-requisitos
+Código em: `https://github.com/brunossaless/alexa-ai-backend`
 
-- Conta em [render.com](https://render.com)
-- Código no **GitHub** ou **GitLab** (Render conecta ao repositório)
+---
 
-### Opção A — Blueprint (`render.yaml`)
+## 2. Criar Web Service
 
-1. Suba o projeto para um repositório Git.
-2. Render → **New** → **Blueprint** → conecte o repo.
-3. O Render lê `render.yaml` e cria o serviço **alexa-ai-backend**.
-4. No painel, preencha os secrets que ficaram vazios:
-   - `OPENAI_API_KEY`
-   - `ALLOWED_ALEXA_USER_IDS` (seu `userId` longo da Alexa)
+**Opção A — Blueprint**
 
-### Opção B — Manual (sem Blueprint)
-
-1. **New** → **Web Service**
+1. [dashboard.render.com](https://dashboard.render.com) → **New** → **Blueprint**
 2. Conecte o repositório
-3. **Runtime:** Docker
-4. **Health Check Path:** `/health`
-5. **Environment Variables:**
+3. Após criar o serviço, abra **Environment** e adicione as variáveis da tabela acima
 
-| Key | Value |
-|-----|--------|
-| `OPENAI_API_KEY` | sua chave `sk-...` |
-| `ALLOWED_ALEXA_USER_IDS` | `amzn1.ask.account....` |
-| `ALEXA_VERIFY_SIGNATURE` | `true` |
-| `NODE_ENV` | `production` |
+**Opção B — Manual**
 
-6. **Create Web Service** → aguarde o deploy
+1. **New** → **Web Service** → conecte o repo
+2. **Runtime:** Docker
+3. **Health Check Path:** `/health`
+4. **Environment:** adicione as variáveis da tabela
+5. **Create Web Service**
 
-### URL do endpoint Alexa
+---
 
-Após o deploy, Render mostra algo como:
+## 3. Endpoint na Alexa
+
+URL do Render (exemplo):
 
 ```text
 https://alexa-ai-backend.onrender.com
 ```
 
-No **Alexa Developer Console** → **Endpoint** → HTTPS:
+**Alexa Developer Console** → **Build** → **Endpoint** → HTTPS:
 
 ```text
 https://alexa-ai-backend.onrender.com/alexa
 ```
 
-Teste: `https://alexa-ai-backend.onrender.com/health` → deve retornar `ok`.
-
-### Plano Free do Render (importante)
-
-No plano **grátis**, o serviço **dorme** após ~15 min sem uso. A primeira pergunta na Alexa pode demorar (cold start) e estourar o timeout de 8s.
-
-Para uso no Echo no dia a dia, use o plano **Starter** (~US$ 7/mês) ou outro host sempre ligado.
-
-### Atualizar o código
-
-Cada `git push` na branch conectada dispara deploy automático (se Auto-Deploy estiver ativo).
+Teste: `https://alexa-ai-backend.onrender.com/health` → `ok`
 
 ---
 
-## 1. Descobrir seu `userId` da Alexa
+## 4. Skill privada
 
-1. Suba o backend (local ou Fly) **sem** `ALLOWED_ALEXA_USER_IDS` (ou vazio).
-2. Abra a skill no simulador ou no Echo e diga: `abrir agente pessoal`.
-3. No log do servidor aparece:
-   ```text
-   Alexa userId (copie para ALLOWED_ALEXA_USER_IDS): amzn1.ask.account.XXXX
-   ```
-4. Copie esse valor.
+1. **Backend:** `ALLOWED_ALEXA_USER_IDS` com seu `userId`
+2. **Console:** **Distribution** → **Development** (só sua conta)
 
----
+### Descobrir `userId`
 
-## 2. Console Alexa
+Com `ALLOWED_ALEXA_USER_IDS` vazio só em **local** (`.env` não vai pro Git):
 
-### Endpoint
-
-**Build** → **Endpoint** → HTTPS:
-
-```text
-https://SEU-SERVICO.onrender.com/alexa
-```
-
-Região padrão (US/EU conforme skill). SSL do Render é aceito pela Amazon.
-
-### Só sua conta (console)
-
-**Distribution** (ou **Availability**):
-
-| Opção | Efeito |
-|--------|--------|
-| **Development** | Só desenvolvedores da skill + dispositivos da sua conta Amazon |
-| **Private** + beta testers | Lista explícita de e-mails Amazon |
-
-Para uso pessoal, **Development** costuma bastar. O `ALLOWED_ALEXA_USER_IDS` no servidor impede outro `userId` mesmo que alguém ache o endpoint.
-
-### Publicar
-
-**Build Model** → testar no simulador → no Echo: *"Alexa, abrir agente pessoal"*.
+1. `npm run start:dev`
+2. Simulador: `abrir agente pessoal`
+3. Copie o `userId` do log ou do **JSON Input**
+4. Cole no **Environment** do Render (não no repositório)
 
 ---
 
-## 3. Variáveis de ambiente
+## 5. Plano Free
 
-| Variável | Obrigatório | Descrição |
-|----------|-------------|-----------|
-| `OPENAI_API_KEY` | Sim | Chave OpenAI com crédito |
-| `ALLOWED_ALEXA_USER_IDS` | Recomendado em produção | `userId` separados por vírgula |
-| `ALEXA_VERIFY_SIGNATURE` | `true` em produção | Valida assinatura da Amazon |
-| `PORT` | Não | Render injeta automaticamente; o app usa `process.env.PORT` |
+Serviço dorme sem uso; primeira requisição pode demorar. Para Echo no dia a dia, use plano **Starter**.
 
 ---
 
-## 4. Alternativa: Fly.io
+## 6. Checklist
 
-Arquivos `fly.toml` e `Dockerfile` no repo. Ver [Fly docs](https://fly.io/docs) se preferir Fly em vez de Render.
-
-Evite túnel temporário (`trycloudflare` / ngrok) em produção — a URL muda e a Alexa para de responder.
-
----
-
-## 5. Checklist
-
-- [ ] Web Service no Render com deploy verde
-- [ ] `ALLOWED_ALEXA_USER_IDS` com seu `userId`
-- [ ] `ALEXA_VERIFY_SIGNATURE=true`
-- [ ] Endpoint no console = `https://....onrender.com/alexa`
-- [ ] Skill em Development ou Private
-- [ ] Teste: pergunta curta → resposta da IA em &lt; 8s
+- [ ] Deploy verde no Render
+- [ ] Secrets só no painel Render
+- [ ] `/health` responde `ok`
+- [ ] Endpoint Alexa = `https://....onrender.com/alexa`
+- [ ] Skill em Development
+- [ ] Teste com pergunta curta

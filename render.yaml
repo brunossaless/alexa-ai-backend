@@ -1,4 +1,4 @@
-# Blueprint: Render Dashboard → New → Blueprint → conectar repositório
+# Blueprint Render — secrets só no painel (Environment), nunca no Git.
 # https://render.com/docs/blueprint-spec
 services:
   - type: web
@@ -7,14 +7,3 @@ services:
     region: oregon
     plan: free
     healthCheckPath: /health
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: PORT
-        value: '3000'
-      - key: ALEXA_VERIFY_SIGNATURE
-        value: 'true'
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: ALLOWED_ALEXA_USER_IDS
-        sync: false
