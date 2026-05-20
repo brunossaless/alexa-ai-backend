@@ -1,0 +1,64 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "agente pessoal",
+      "intents": [
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.FallbackIntent",
+          "samples": []
+        },
+        {
+          "name": "GptQueryIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "para que serve {query}",
+            "para que serve o {query}",
+            "o que é {query}",
+            "o que é o {query}",
+            "o que é a {query}",
+            "como funciona {query}",
+            "como funciona o {query}",
+            "como está {query}",
+            "como está a {query}",
+            "como está o {query}",
+            "qual é {query}",
+            "qual é a {query}",
+            "qual é o {query}",
+            "quanto custa {query}",
+            "quando é {query}",
+            "onde fica {query}",
+            "por que {query}",
+            "me diga {query}",
+            "me fale sobre {query}",
+            "me explica {query}",
+            "diz {query}",
+            "quero saber {query}",
+            "preciso saber {query}"
+          ]
+        }
+      ],
+      "types": []
+    }
+  }
+}
