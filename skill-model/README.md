@@ -26,7 +26,9 @@ A Amazon **não permite** utterance só com slot (“carrier phrase” obrigató
 
 ### Pergunta “livre” (qualquer coisa)
 
-Ao abrir a skill (`LaunchRequest`), o backend pede a pergunta com **elicitação do slot** `query`. Na segunda fala você pode dizer qualquer coisa (ex.: o episódio do Better Call Saul) sem começar com “o que é” ou “me fale sobre”.
+Use frases com carrier phrase (`o que acontece no {query}`, `me fale sobre {query}`, etc.) ou abra a skill e, na **segunda fala**, diga a pergunta começando com um desses padrões.
+
+**Não** use `Dialog.ElicitSlot` no Launch sem configurar **Dialog** no intent no Developer Console — isso gera `SessionEnded reason=ERROR` e a skill fecha na hora.
 
 **Importante:** depois de editar este JSON, é obrigatório **Save Model** e **Build Model** no console. Só atualizar o backend no Render **não** muda o que a Alexa entende.
 

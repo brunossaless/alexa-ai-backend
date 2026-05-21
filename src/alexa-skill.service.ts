@@ -104,7 +104,13 @@ export class AlexaSkillService implements OnModuleInit {
       const startedAt = Date.now();
       const requestMeta = parseAlexaRequestMeta(req.body);
       this.logger.log(
-        `>>> Alexa request type=${requestMeta.type ?? '?'} intent=${requestMeta.intent ?? '-'}${requestMeta.sessionEndedReason ? ` reason=${requestMeta.sessionEndedReason}` : ''}`,
+        `>>> Alexa request type=${requestMeta.type ?? '?'} intent=${requestMeta.intent ?? '-'}` +
+          (requestMeta.sessionEndedReason
+            ? ` reason=${requestMeta.sessionEndedReason}`
+            : '') +
+          (requestMeta.sessionEndedError
+            ? ` (${requestMeta.sessionEndedError})`
+            : ''),
       );
 
       const sendJson = res.json.bind(res);
@@ -173,17 +179,14 @@ export class AlexaSkillService implements OnModuleInit {
         if (!this.userAccess.isAllowed(input)) {
           return this.userAccess.deniedResponse(input);
         }
+        this.logger.log('LaunchRequest — saudação (sem elicitar slot; evita ERROR sem Dialog no console)');
         return input.responseBuilder
           .speak(
-            'Oi. Sou um assistente desenvolvido por Bruno Sales. O que você quer saber?',
+            'Oi. Sou um assistente desenvolvido por Bruno Sales. Pode perguntar o que quiser.',
           )
-          .addElicitSlotDirective('query', {
-            name: GPT_QUERY_INTENT,
-            confirmationStatus: 'NONE',
-            slots: {
-              query: { name: 'query', confirmationStatus: 'NONE' },
-            },
-          })
+          .reprompt(
+            'Por exemplo: o que acontece no episódio dois de better call saul.',
+          )
           .getResponse();
       },
     };
@@ -332,11 +335,15 @@ export class AlexaSkillService implements OnModuleInit {
       canHandle: (input: HandlerInput) =>
         getRequestType(input.requestEnvelope) === 'SessionEndedRequest',
       handle: (input: HandlerInput) => {
-        const reason =
-          (input.requestEnvelope.request as SessionEndedRequest).reason ??
-          'UNKNOWN';
+        const ended = input.requestEnvelope.request as SessionEndedRequest;
+        const reason = ended.reason ?? 'UNKNOWN';
+        const err = ended.error;
         this.logger.warn(
-          `Sessão encerrada pela Alexa (reason=${reason}) — verifique o POST anterior com Intent/Launch`,
+          `Sessão encerrada (reason=${reason})` +
+            (err
+              ? ` error=${err.type ?? '?'}: ${err.message ?? ''}`
+              : '') +
+            ' — o POST útil costuma ser Launch/Intent ANTES deste; se só aparece SessionEnded, a abertura falhou no dispositivo ou no Render (cold start).',
         );
         return input.responseBuilder.getResponse();
       },
