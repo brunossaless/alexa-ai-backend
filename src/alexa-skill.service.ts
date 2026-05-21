@@ -175,9 +175,15 @@ export class AlexaSkillService implements OnModuleInit {
         }
         return input.responseBuilder
           .speak(
-            'Oi. Em que posso ajudar? Sou um assistente desenvolvido por Bruno Sales.',
+            'Oi. Sou um assistente desenvolvido por Bruno Sales. O que você quer saber?',
           )
-          .reprompt('Pode perguntar.')
+          .addElicitSlotDirective('query', {
+            name: GPT_QUERY_INTENT,
+            confirmationStatus: 'NONE',
+            slots: {
+              query: { name: 'query', confirmationStatus: 'NONE' },
+            },
+          })
           .getResponse();
       },
     };
