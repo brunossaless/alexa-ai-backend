@@ -12,6 +12,14 @@ import { ExpressAdapter } from 'ask-sdk-express-adapter';
 import type { IntentRequest } from 'ask-sdk-model';
 import type { RequestHandler } from 'express';
 import { AlexaAiService } from './alexa-ai.service';
+import {
+  ALEXA_ERROR_FALLBACK,
+  ALEXA_FORCE_TEST_SPEECH,
+  ALEXA_LATENCY_WARN_MS,
+  buildMinimalAlexaResponse,
+  getOutputSpeechText,
+  toAlexaResponseEnvelope,
+} from './alexa-response.util';
 import { AlexaUserAccessService } from './alexa-user-access.service';
 import { extractUserQuestion } from './alexa-utterance.util';
 
@@ -22,6 +30,7 @@ export class AlexaSkillService implements OnModuleInit {
   private readonly logger = new Logger(AlexaSkillService.name);
   private readonly skill: Skill;
   private readonly expressHandlers: RequestHandler[];
+  private readonly forceTestResponse: boolean;
 
   constructor(
     private readonly aiService: AlexaAiService,
@@ -30,6 +39,9 @@ export class AlexaSkillService implements OnModuleInit {
   ) {
     const verifySignature =
       configService.get<string>('ALEXA_VERIFY_SIGNATURE') === 'true';
+
+    this.forceTestResponse =
+      configService.get<string>('ALEXA_FORCE_TEST_RESPONSE') === 'true';
 
     this.skill = SkillBuilders.custom()
       .addRequestHandlers(
@@ -46,7 +58,7 @@ export class AlexaSkillService implements OnModuleInit {
         handle: (input, error) => {
           this.logger.error('Erro na skill', error);
           return input.responseBuilder
-            .speak('Desculpe, ocorreu um erro interno.')
+            .speak(ALEXA_ERROR_FALLBACK)
             .getResponse();
         },
       })
@@ -62,6 +74,11 @@ export class AlexaSkillService implements OnModuleInit {
     this.logger.log(
       `Verificação de assinatura Alexa: ${verifySignature ? 'ATIVADA' : 'desativada'}`,
     );
+    if (this.forceTestResponse) {
+      this.logger.warn(
+        `ALEXA_FORCE_TEST_RESPONSE=true: respostas de IA substituídas por "${ALEXA_FORCE_TEST_SPEECH}"`,
+      );
+    }
   }
 
   onModuleInit(): void {
@@ -82,25 +99,51 @@ export class AlexaSkillService implements OnModuleInit {
     const skillHandler = wrapped[wrapped.length - 1];
 
     wrapped[wrapped.length - 1] = async (req, res, next) => {
+      const startedAt = Date.now();
       const sendJson = res.json.bind(res);
       res.json = (body?: unknown) => {
         const envelope = toAlexaResponseEnvelope(body);
+        const speechText = getOutputSpeechText(envelope);
+        const latencyMs = Date.now() - startedAt;
+
+        if (!speechText) {
+          this.logger.error(
+            'outputSpeech.text vazio após normalização; aplicando fallback',
+          );
+        }
+
+        this.logger.log(
+          `<<< JSON enviado à Alexa (${latencyMs}ms): ${JSON.stringify(envelope)}`,
+        );
+        if (latencyMs > ALEXA_LATENCY_WARN_MS) {
+          this.logger.warn(
+            `Latência ${latencyMs}ms — a Alexa costuma encerrar em ~8s (som "tum" sem fala)`,
+          );
+        }
+
         res.statusCode = 200;
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         return sendJson(envelope);
       };
 
+      const sendAlexaFallback = () => {
+        const envelope = buildMinimalAlexaResponse(ALEXA_ERROR_FALLBACK);
+        this.logger.warn(`<<< Fallback Alexa: ${JSON.stringify(envelope)}`);
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        sendJson(envelope);
+      };
+
       try {
         await skillHandler(req, res, next);
         if (!res.headersSent) {
-          res.status(500).send('Skill handler did not send a response');
-        } else {
-          this.logger.log('<<< Resposta enviada para a Amazon (200)');
+          this.logger.error('Skill handler não enviou resposta');
+          sendAlexaFallback();
         }
       } catch (error) {
         this.logger.error('Erro ao processar requisição da Alexa', error);
         if (!res.headersSent) {
-          res.status(500).send('Internal Server Error');
+          sendAlexaFallback();
         }
       }
     };
@@ -226,17 +269,27 @@ export class AlexaSkillService implements OnModuleInit {
 
     this.logger.log(`Pergunta: ${userPrompt}`);
 
+    if (this.forceTestResponse) {
+      this.logger.warn(
+        `Modo teste ativo — falando: "${ALEXA_FORCE_TEST_SPEECH}"`,
+      );
+      return input.responseBuilder.speak(ALEXA_FORCE_TEST_SPEECH).getResponse();
+    }
+
+    const aiStartedAt = Date.now();
     try {
       const aiResponse = await this.aiService.generateResponse(userPrompt);
+      this.logger.log(
+        `OpenAI respondeu em ${Date.now() - aiStartedAt}ms (${aiResponse.length} chars)`,
+      );
       return input.responseBuilder
         .speak(escapeXmlCharacters(aiResponse))
         .reprompt('Tem mais alguma pergunta?')
         .getResponse();
-    } catch {
+    } catch (error) {
+      this.logger.error('Erro em respondWithAi', error);
       return input.responseBuilder
-        .speak(
-          'Desculpe, tive um problema ao processar sua pergunta. Tente novamente.',
-        )
+        .speak(ALEXA_ERROR_FALLBACK)
         .reprompt('Qual é a sua pergunta?')
         .getResponse();
     }
@@ -249,47 +302,4 @@ export class AlexaSkillService implements OnModuleInit {
       handle: (input: HandlerInput) => input.responseBuilder.getResponse(),
     };
   }
-}
-
-type SpeechOutput = {
-  type?: string;
-  ssml?: string;
-  text?: string;
-  playBehavior?: string;
-};
-
-function ssmlToPlainText(ssml: string): string {
-  return ssml
-    .replace(/<speak[^>]*>/gi, '')
-    .replace(/<\/speak>/gi, '')
-    .replace(/<[^>]+>/g, '')
-    .trim();
-}
-
-function toPlainTextSpeech(speech: unknown): SpeechOutput {
-  const s = speech as SpeechOutput;
-  if (s.type === 'SSML' && s.ssml) {
-    return { type: 'PlainText', text: ssmlToPlainText(s.ssml) };
-  }
-  return s;
-}
-
-function toAlexaResponseEnvelope(body: unknown): Record<string, unknown> {
-  const envelope = body as Record<string, unknown>;
-  const response = envelope?.response as Record<string, unknown> | undefined;
-
-  if (response?.outputSpeech) {
-    response.outputSpeech = toPlainTextSpeech(response.outputSpeech);
-  }
-
-  const reprompt = response?.reprompt as Record<string, unknown> | undefined;
-  if (reprompt?.outputSpeech) {
-    reprompt.outputSpeech = toPlainTextSpeech(reprompt.outputSpeech);
-  }
-
-  return {
-    version: envelope.version ?? '1.0',
-    sessionAttributes: envelope.sessionAttributes ?? {},
-    response,
-  };
 }

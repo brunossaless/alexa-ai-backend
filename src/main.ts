@@ -12,9 +12,12 @@ async function bootstrap() {
   const port = configService.get<number>('PORT') || 3000;
 
   const http = app.getHttpAdapter().getInstance();
-  http.get('/health', (_req: unknown, res: { send: (body: string) => void }) => {
-    res.send('ok');
-  });
+  http.get(
+    '/health',
+    (_req: unknown, res: { send: (body: string) => void }) => {
+      res.send('ok');
+    },
+  );
 
   await app.listen(port);
   console.log(`🚀 Servidor Alexa AI rodando em: http://localhost:${port}`);

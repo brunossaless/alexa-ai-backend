@@ -77,9 +77,7 @@ export class AlexaUserAccessService {
     this.logger.warn(
       `Acesso negado: userId do request (${receivedUserId.length} chars) não bate com ALLOWED_ALEXA_USER_IDS (${configured.length} chars, mesmo tamanho=${sameLength})`,
     );
-    this.logger.warn(
-      `userId recebido (copie para .env): ${receivedUserId}`,
-    );
+    this.logger.warn(`userId recebido (copie para .env): ${receivedUserId}`);
   }
 }
 

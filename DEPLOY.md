@@ -13,6 +13,7 @@ Variáveis necessárias (crie no painel do Render):
 | `OPENAI_API_KEY` | Sim | Painel OpenAI |
 | `ALLOWED_ALEXA_USER_IDS` | Sim (produção) | `userId` da Alexa (log local ou JSON Input) |
 | `ALEXA_VERIFY_SIGNATURE` | Sim | `true` em produção |
+| `ALEXA_FORCE_TEST_RESPONSE` | Não | `true` = ignora OpenAI e fala **"Teste funcionando"** (diagnóstico) |
 | `NODE_ENV` | Recomendado | `production` |
 
 O Render define `PORT` automaticamente.

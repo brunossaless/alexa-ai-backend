@@ -1,13 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
+import { sanitizeSpeechText } from './alexa-response.util';
 
 /** Limite de caracteres falados na Alexa (~20–25 palavras). */
 const MAX_SPEECH_CHARS = 280;
 
 const SYSTEM_PROMPT = [
   'Assistente de voz Alexa em português do Brasil.',
-  'Responda em no máximo 2 frases curtas (até 25 palavras no total).',
+  'Responda em no máximo 4 frases curtas (até 100 palavras no total).',
   'Seja direto, sem listas, sem markdown, sem emojis e sem caracteres especiais.',
   'Se não souber, diga em uma frase que não tem essa informação.',
 ].join(' ');
@@ -35,14 +36,28 @@ export class AlexaAiService {
         temperature: 0.3,
       });
 
-      const raw =
-        response.choices[0].message.content?.trim() ||
-        'Não consegui processar a resposta.';
+      const choice = response.choices?.[0];
+      const rawContent = choice?.message?.content?.trim();
 
-      return truncateForVoice(raw);
+      if (!rawContent) {
+        this.logger.warn('OpenAI sem content na resposta', {
+          choices: response.choices?.length ?? 0,
+          finish_reason: choice?.finish_reason,
+        });
+        return truncateForVoice('Não consegui processar a resposta.');
+      }
+
+      const sanitized = sanitizeSpeechText(rawContent);
+      if (!sanitized) {
+        this.logger.warn('OpenAI retornou texto vazio após sanitização');
+        return truncateForVoice('Não consegui processar a resposta.');
+      }
+
+      this.logger.debug(`OpenAI raw (${sanitized.length} chars): ${sanitized}`);
+      return truncateForVoice(sanitized);
     } catch (error) {
       this.logger.error('Erro na API de IA', error);
-      return 'Desculpe, tive um problema ao conectar com o servidor de inteligência artificial.';
+      throw error;
     }
   }
 }
