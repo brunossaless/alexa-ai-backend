@@ -5,6 +5,7 @@ import {
   getOutputSpeechText,
   sanitizeSpeechText,
   toAlexaResponseEnvelope,
+  toSessionEndedEnvelope,
 } from './alexa-response.util';
 
 describe('alexa-response.util', () => {
@@ -36,13 +37,37 @@ describe('alexa-response.util', () => {
     expect(getOutputSpeechText(envelope)).toBe('Olá mundo');
   });
 
-  it('injeta outputSpeech quando a resposta do SDK não traz fala', () => {
+  it('injeta outputSpeech quando há campos de resposta mas sem fala', () => {
     const envelope = toAlexaResponseEnvelope({
       version: '1.0',
       response: { shouldEndSession: true },
     });
 
     expect(getOutputSpeechText(envelope)).toBe(ALEXA_ERROR_FALLBACK);
+  });
+
+  it('não injeta fala em resposta vazia (SessionEnded)', () => {
+    const envelope = toAlexaResponseEnvelope({
+      version: '1.0',
+      response: {},
+    });
+
+    expect(getOutputSpeechText(envelope)).toBe('');
+    expect(envelope.response).toEqual({});
+  });
+
+  it('toSessionEndedEnvelope preserva resposta vazia', () => {
+    const envelope = toSessionEndedEnvelope({
+      version: '1.0',
+      sessionAttributes: { x: 1 },
+      response: {},
+    });
+
+    expect(envelope).toEqual({
+      version: '1.0',
+      sessionAttributes: { x: 1 },
+      response: {},
+    });
   });
 
   it('sanitiza markdown e espaços extras', () => {

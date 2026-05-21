@@ -54,7 +54,25 @@
             "me explica {query}",
             "diz {query}",
             "quero saber {query}",
-            "preciso saber {query}"
+            "preciso saber {query}",
+            "{query}",
+            "o que acontece {query}",
+            "o que acontece no {query}",
+            "o que acontece na {query}",
+            "o que acontece em {query}",
+            "o que aconteceu {query}",
+            "o que aconteceu no {query}",
+            "resumo do {query}",
+            "resumo de {query}",
+            "resumo da {query}",
+            "episódio {query}",
+            "episodio {query}",
+            "temporada {query}",
+            "conta {query}",
+            "explica {query}",
+            "fala sobre {query}",
+            "fala do {query}",
+            "fala de {query}"
           ]
         }
       ],

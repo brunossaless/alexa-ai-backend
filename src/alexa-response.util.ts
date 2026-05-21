@@ -86,6 +86,25 @@ export function buildMinimalAlexaResponse(
   };
 }
 
+/** Resposta vazia exigida pela Amazon após SessionEndedRequest (não fala no dispositivo). */
+export function toSessionEndedEnvelope(
+  body: unknown,
+): Record<string, unknown> {
+  const envelope = (body ?? {}) as Record<string, unknown>;
+  return {
+    version: envelope.version ?? '1.0',
+    sessionAttributes: envelope.sessionAttributes ?? {},
+    response: (envelope.response as Record<string, unknown>) ?? {},
+  };
+}
+
+function applyShouldEndSessionDefault(response: Record<string, unknown>): void {
+  if (response.shouldEndSession !== undefined) {
+    return;
+  }
+  response.shouldEndSession = response.reprompt ? false : true;
+}
+
 export function toAlexaResponseEnvelope(
   body: unknown,
   fallback = ALEXA_ERROR_FALLBACK,
@@ -99,11 +118,11 @@ export function toAlexaResponseEnvelope(
       response.outputSpeech,
       fallback,
     );
-    const after = (response.outputSpeech as SpeechOutput).text;
-    if (!before && after === fallback) {
-      // caller may log via skill service
+    if (!before && (response.outputSpeech as SpeechOutput).text === fallback) {
+      // substituído SSML/texto vazio pelo fallback
     }
-  } else {
+  } else if (Object.keys(response).length > 0) {
+    // Resposta parcial sem fala (erro do SDK) — não confundir com SessionEnded (response {})
     response.outputSpeech = { type: 'PlainText', text: fallback };
   }
 
@@ -113,6 +132,10 @@ export function toAlexaResponseEnvelope(
       reprompt.outputSpeech,
       fallback,
     );
+  }
+
+  if (response.outputSpeech) {
+    applyShouldEndSessionDefault(response);
   }
 
   return {

@@ -9,7 +9,7 @@ import {
   SkillBuilders,
 } from 'ask-sdk-core';
 import { ExpressAdapter } from 'ask-sdk-express-adapter';
-import type { IntentRequest } from 'ask-sdk-model';
+import type { IntentRequest, SessionEndedRequest } from 'ask-sdk-model';
 import type { RequestHandler } from 'express';
 import { AlexaAiService } from './alexa-ai.service';
 import {
@@ -19,7 +19,9 @@ import {
   buildMinimalAlexaResponse,
   getOutputSpeechText,
   toAlexaResponseEnvelope,
+  toSessionEndedEnvelope,
 } from './alexa-response.util';
+import { parseAlexaRequestMeta } from './alexa-request.util';
 import { AlexaUserAccessService } from './alexa-user-access.service';
 import { extractUserQuestion } from './alexa-utterance.util';
 
@@ -100,21 +102,33 @@ export class AlexaSkillService implements OnModuleInit {
 
     wrapped[wrapped.length - 1] = async (req, res, next) => {
       const startedAt = Date.now();
+      const requestMeta = parseAlexaRequestMeta(req.body);
+      this.logger.log(
+        `>>> Alexa request type=${requestMeta.type ?? '?'} intent=${requestMeta.intent ?? '-'}${requestMeta.sessionEndedReason ? ` reason=${requestMeta.sessionEndedReason}` : ''}`,
+      );
+
       const sendJson = res.json.bind(res);
       res.json = (body?: unknown) => {
-        const envelope = toAlexaResponseEnvelope(body);
+        const envelope =
+          requestMeta.type === 'SessionEndedRequest'
+            ? toSessionEndedEnvelope(body)
+            : toAlexaResponseEnvelope(body);
         const speechText = getOutputSpeechText(envelope);
         const latencyMs = Date.now() - startedAt;
 
-        if (!speechText) {
+        if (requestMeta.type === 'SessionEndedRequest') {
+          this.logger.log(
+            `<<< SessionEnded (${latencyMs}ms) — resposta vazia (sessão já encerrada no dispositivo): ${JSON.stringify(envelope)}`,
+          );
+        } else if (!speechText) {
           this.logger.error(
-            'outputSpeech.text vazio após normalização; aplicando fallback',
+            'outputSpeech.text vazio após normalização (request não é SessionEnded)',
+          );
+        } else {
+          this.logger.log(
+            `<<< JSON enviado à Alexa (${latencyMs}ms): ${JSON.stringify(envelope)}`,
           );
         }
-
-        this.logger.log(
-          `<<< JSON enviado à Alexa (${latencyMs}ms): ${JSON.stringify(envelope)}`,
-        );
         if (latencyMs > ALEXA_LATENCY_WARN_MS) {
           this.logger.warn(
             `Latência ${latencyMs}ms — a Alexa costuma encerrar em ~8s (som "tum" sem fala)`,
@@ -180,6 +194,7 @@ export class AlexaSkillService implements OnModuleInit {
         }
         this.logger.log('Intent: GptQueryIntent');
         const request = input.requestEnvelope.request as IntentRequest;
+        this.logIntentSlots(request);
         return this.respondWithAi(input, extractUserQuestion(request));
       },
     };
@@ -225,10 +240,12 @@ export class AlexaSkillService implements OnModuleInit {
         if (!this.userAccess.isAllowed(input)) {
           return this.userAccess.deniedResponse(input);
         }
-        this.logger.log('Intent: AMAZON.FallbackIntent');
+        this.logger.warn(
+          'Intent: AMAZON.FallbackIntent — frase não bateu no GptQueryIntent; atualize o modelo no Developer Console',
+        );
         return input.responseBuilder
           .speak(
-            'Não entendi. Tente de novo, por exemplo: para que serve o azox, ou como está a maré hoje.',
+            'Não entendi o formato. Tente começar com o que acontece, o que é, ou me fale sobre, e depois sua pergunta.',
           )
           .reprompt('Qual é a sua pergunta?')
           .getResponse();
@@ -247,9 +264,18 @@ export class AlexaSkillService implements OnModuleInit {
         const request = input.requestEnvelope.request as IntentRequest;
         const intentName = getIntentName(input.requestEnvelope) ?? 'unknown';
         this.logger.log(`Intent não previsto: ${intentName}`);
+        this.logIntentSlots(request);
         return this.respondWithAi(input, extractUserQuestion(request));
       },
     };
+  }
+
+  private logIntentSlots(request: IntentRequest): void {
+    const slots = request.intent.slots ?? {};
+    const summary = Object.fromEntries(
+      Object.entries(slots).map(([name, slot]) => [name, slot?.value ?? null]),
+    );
+    this.logger.log(`Slots Alexa: ${JSON.stringify(summary)}`);
   }
 
   private async respondWithAi(
@@ -299,7 +325,15 @@ export class AlexaSkillService implements OnModuleInit {
     return {
       canHandle: (input: HandlerInput) =>
         getRequestType(input.requestEnvelope) === 'SessionEndedRequest',
-      handle: (input: HandlerInput) => input.responseBuilder.getResponse(),
+      handle: (input: HandlerInput) => {
+        const reason =
+          (input.requestEnvelope.request as SessionEndedRequest).reason ??
+          'UNKNOWN';
+        this.logger.warn(
+          `Sessão encerrada pela Alexa (reason=${reason}) — verifique o POST anterior com Intent/Launch`,
+        );
+        return input.responseBuilder.getResponse();
+      },
     };
   }
 }

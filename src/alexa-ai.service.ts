@@ -6,6 +6,9 @@ import { sanitizeSpeechText } from './alexa-response.util';
 /** Limite de caracteres falados na Alexa (~20–25 palavras). */
 const MAX_SPEECH_CHARS = 280;
 
+/** Responder antes do timeout da Alexa (~8s). */
+const OPENAI_TIMEOUT_MS = 6000;
+
 const SYSTEM_PROMPT = [
   'Assistente de voz Alexa em português do Brasil.',
   'Responda em no máximo 4 frases curtas (até 100 palavras no total).',
@@ -26,15 +29,18 @@ export class AlexaAiService {
 
   async generateResponse(prompt: string): Promise<string> {
     try {
-      const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: prompt.trim() },
-        ],
-        max_tokens: 80,
-        temperature: 0.3,
-      });
+      const response = await this.openai.chat.completions.create(
+        {
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: prompt.trim() },
+          ],
+          max_tokens: 80,
+          temperature: 0.3,
+        },
+        { timeout: OPENAI_TIMEOUT_MS },
+      );
 
       const choice = response.choices?.[0];
       const rawContent = choice?.message?.content?.trim();
@@ -56,6 +62,11 @@ export class AlexaAiService {
       this.logger.debug(`OpenAI raw (${sanitized.length} chars): ${sanitized}`);
       return truncateForVoice(sanitized);
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('timed out') || message.includes('timeout')) {
+        this.logger.warn(`OpenAI excedeu ${OPENAI_TIMEOUT_MS}ms`);
+        return 'Desculpe, demorei demais. Tente uma pergunta mais curta.';
+      }
       this.logger.error('Erro na API de IA', error);
       throw error;
     }

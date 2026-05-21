@@ -10,15 +10,17 @@ O backend sozinho **não** remove a necessidade de frases de ativação na Alexa
 4. Confirme que o intent `GptQueryIntent` tem slot `query` do tipo **AMAZON.SearchQuery**
 5. **Save Model** → **Build Model**
 
-## Frases que passam a funcionar (sem "perguntar")
+## Frases que passam a funcionar
 
 - para que serve o azox
 - o que é inteligência artificial
 - como está a maré hoje
-- qual é a capital do Brasil
-- me diga a previsão do tempo
+- **o que acontece no episódio dois temporada quatro de better call saul**
+- me fale sobre breaking bad
 
-A Amazon exige um pouco de texto fixo antes do slot `{query}`; por isso há várias amostras (`para que serve`, `como está`, `o que é`, etc.), não uma palavra mágica `perguntar`.
+Há amostras com texto fixo (`o que é`, `como está`, …) e também **`{query}`** sozinho, para perguntas longas e abertas.
+
+**Importante:** depois de editar este JSON, é obrigatório **Save Model** e **Build Model** no console. Só atualizar o backend no Render **não** muda o que a Alexa entende.
 
 ## Invocation name
 
